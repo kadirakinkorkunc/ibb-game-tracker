@@ -25,9 +25,9 @@ def send_mail():
     receiver = os.getenv("RECEIVER_EMAIL")
 
     message = """\
-    Subject: IBB Halı Saha Bulucu.
+    Subject: IBB Slot Finder.
 
-    Açıkta slot var, kontrol etmeyi unutma."""
+    There is an open slot for your choice. Check out https://online.spor.istanbul now!"""
 
     with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
         server.login(sender_email, password)
