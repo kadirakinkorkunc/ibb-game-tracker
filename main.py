@@ -5,7 +5,7 @@ import sys
 import time
 
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions
@@ -13,9 +13,10 @@ from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.chrome.options import Options
 from dotenv import load_dotenv
+from email.message import EmailMessage
 
 
-def send_mail():
+def send_mail(action):
     port = 465  # For SSL
     password = os.getenv("EMAIL_SENDER_PW")  # does not work with 2FA available accounts. also email should be activated to work on less secure apps
 
@@ -24,19 +25,53 @@ def send_mail():
     sender_email = os.getenv("SENDER_EMAIL")
     receiver = os.getenv("RECEIVER_EMAIL")
 
-    message = """\
-    Subject: IBB Slot Finder.
+    msg = EmailMessage()
+    msg['Subject'] = 'Hey, we have news about the pitch!'
+    msg['From'] = sender_email
+    msg['To'] = receiver
 
-    There is an open slot for your choice. Check out https://online.spor.istanbul now!"""
+    if action == "ADD_TO_BASKET":
+        message = """\
+        Subject: IBB Slot Finder.
+    
+        Checkout your basket in 12 hours, we made a cart reservation for your requested game. Go https://online.spor.istanbul now!"""
+    elif action == "WARN":
+        message = """\
+        Subject: IBB Slot Finder.
+
+        There is an open slot for your choice. Go https://online.spor.istanbul now!"""
+
+    msg.set_content(message)
 
     with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
         server.login(sender_email, password)
-        server.sendmail(sender_email, receiver, message)
+        server.sendmail(sender_email, receiver, msg.as_string())
+        server.quit()
 
 
-def available():
-    if driver.current_url is "https://online.spor.istanbul/uyegiris":
+def find_next_x_day(day_index, day_elements, requested_time_range):
+    try:
+        requested_day = day_elements[day_index]
+        time_range = requested_day.find_element_by_xpath("//span[.='{}']".format(requested_time_range))
+        print("There is a time range exist in this week.")
+    except NoSuchElementException:
+        try:
+            print("Couldn't find at the first element, trying to find in next week if it exists.")
+            time_range = day_elements[day_index + 8].find_element_by_xpath(
+                "//span[.='{}']".format(requested_time_range))
+            print("There is a time range exists in next week.")
+        except NoSuchElementException:
+            print("Couldn't find in next week either...")
+            return None
+    return time_range
+
+
+def get_required_element_if_available():
+    if driver.current_url == "https://online.spor.istanbul/uyegiris":
         login()
+
+    if driver.current_url != "https://online.spor.istanbul/satiskiralik":
+        driver.get("https://online.spor.istanbul/satiskiralik")
 
     Select(driver.find_element_by_name("ctl00$pageContent$ddlBransFiltre")).select_by_value(
         os.getenv("GAME_ID"))  # game
@@ -55,23 +90,20 @@ def available():
 
     WebDriverWait(driver, 10).until(expected_conditions.presence_of_element_located((By.ID, 'pageContent_Div1')))
     content = driver.find_element_by_id("pageContent_Div1")
-    day = content.find_elements_by_tag_name("div")[map_day(os.getenv("REQUESTED_DAY"))]
+    days = content.find_elements_by_tag_name("div")
 
-    try:
-        midnight = day.find_element_by_xpath("//span[.='{}']".format(os.getenv("REQUESTED_TIME_RANGE")))
-    except Exception:
-        print("Time range does does not available at this moment.")
-        return False
 
-    status = midnight.find_element_by_xpath("./preceding-sibling::div")
+    time_range = find_next_x_day(map_day(os.getenv("REQUESTED_DAY")), days, os.getenv("REQUESTED_TIME_RANGE"))
 
-    try:
-        status.find_element_by_class_name("labelUfak")
-        print("Still not available.")
-        return False
-    except NoSuchElementException:
-        print("Opening found, sending mail...")
-        return True
+    if time_range is not None:
+        try:
+            clickable = time_range.find_element_by_xpath("./following-sibling::a")
+            print("There is a clickable link after time text, it means there is a open slot.")
+            return clickable
+        except NoSuchElementException:
+            print("There is no clickable link after time text, it means there is still no open slot.")
+            return None
+    return None
 
 
 def map_day(day):
@@ -98,7 +130,7 @@ def get_driver():
     chrome_options.add_argument("no-sandbox")
     chrome_options.add_argument("headless")
     chrome_options.add_argument("start-maximized")
-    chrome_options.add_argument("window-size=1900,1080");
+    chrome_options.add_argument("window-size=1900,1080")
     chrome = webdriver.Chrome(options=chrome_options)
     return chrome
 
@@ -107,14 +139,41 @@ def open_login_page():
     driver.get("https://online.spor.istanbul/uyegiris")
 
 
+def add_to_basket(clickable):
+    print("Opening found, trying to add to basket")
+    clickable.click()
+    WebDriverWait(driver, 10).until(expected_conditions.alert_is_present())
+    driver.switch_to.alert.accept()
+    WebDriverWait(driver, 10).until(
+        expected_conditions.presence_of_element_located((By.ID, 'pageContent_cboxKiralikSatisSozlesmesi')))
+    driver.find_element_by_id("pageContent_cboxKiralikSatisSozlesmesi").click()
+    WebDriverWait(driver, 10).until(expected_conditions.presence_of_element_located((By.ID, 'pageContent_lbtnSepeteEkle')))
+    driver.find_element_by_id("pageContent_lbtnSepeteEkle").click()
+    WebDriverWait(driver, 10).until(expected_conditions.presence_of_element_located((By.ID, 'pageContent_btnOdemeYap')))
+
+
+def retry():
+    print("still closed refreshing after ", retry_in_sec, " seconds")
+    time.sleep(int(retry_in_sec))
+    driver.refresh()
+    start_job()
+
+
 def start_job():
-    if available():
-        send_mail()
-        sys.exit()
-    else:
-        print("still closed refreshing after ", retry_in_sec, " seconds")
-        time.sleep(int(retry_in_sec))
-        driver.refresh()
+    action = os.getenv("ACTION")
+
+    try:
+        clickable = get_required_element_if_available()
+
+        if clickable is not None:
+            if action == "ADD_TO_BASKET":
+                add_to_basket(clickable)
+            send_mail(action)
+            sys.exit()
+        else:
+            retry()
+    except TimeoutException:
+        print("timeout exception occurred, trying again...")
         start_job()
 
 
