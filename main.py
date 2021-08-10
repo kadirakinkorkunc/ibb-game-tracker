@@ -92,16 +92,15 @@ def get_required_element_if_available():
     content = driver.find_element_by_id("pageContent_Div1")
     days = content.find_elements_by_tag_name("div")
 
-
-    time_range = find_next_x_day(map_day(os.getenv("REQUESTED_DAY")), days, os.getenv("REQUESTED_TIME_RANGE"))
-
+    requested_day = os.getenv("REQUESTED_DAY")
+    requested_time = os.getenv("REQUESTED_TIME_RANGE")
+    time_range = find_next_x_day(map_day(requested_day), days, requested_time)
+    print("Day: ", requested_day, "- Time: ", requested_time)
     if time_range is not None:
         try:
             clickable = time_range.find_element_by_xpath("./following-sibling::a")
-            print("There is a clickable link after time text, it means there is a open slot.")
             return clickable
         except NoSuchElementException:
-            print("There is no clickable link after time text, it means there is still no open slot.")
             return None
     return None
 
@@ -153,7 +152,8 @@ def add_to_basket(clickable):
 
 
 def retry():
-    print("still closed refreshing after ", retry_in_sec, " seconds")
+    print("still closed, will retry after ", retry_in_sec, " seconds")
+    print("------------")
     time.sleep(int(retry_in_sec))
     driver.refresh()
     start_job()
