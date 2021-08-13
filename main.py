@@ -12,40 +12,41 @@ from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
 from dotenv import load_dotenv
 from email.message import EmailMessage
 
 
 def send_mail(action):
+    print("sending mail...")
     port = 465  # For SSL
     password = os.getenv("EMAIL_SENDER_PW")  # does not work with 2FA available accounts. also email should be activated to work on less secure apps
 
     # Create a secure SSL context
     context = ssl.create_default_context()
     sender_email = os.getenv("SENDER_EMAIL")
-    receiver = os.getenv("RECEIVER_EMAIL")
+    receivers = os.getenv("RECEIVER_EMAILS")
+    requested_day = os.getenv("REQUESTED_DAY")
+    requested_time = os.getenv("REQUESTED_TIME_RANGE")
 
     msg = EmailMessage()
     msg['Subject'] = 'Hey, we have news about the pitch!'
     msg['From'] = sender_email
-    msg['To'] = receiver
+    msg['To'] = receivers
 
     if action == "ADD_TO_BASKET":
-        message = """\
-        Subject: IBB Slot Finder.
-    
-        Checkout your basket in 12 hours, we made a cart reservation for your requested game. Go https://online.spor.istanbul now!"""
+        message = "Checkout your basket in 12 hours, we made a cart reservation for {} - {}. " \
+                  "Go https://online.spor.istanbul now!".format(requested_day, requested_time)
     elif action == "WARN":
-        message = """\
-        Subject: IBB Slot Finder.
-
-        There is an open slot for your choice. Go https://online.spor.istanbul now!"""
+        message = "There is an open slot for your choice({} - {}). " \
+                  "Go https://online.spor.istanbul now!".format(requested_day, requested_time)
 
     msg.set_content(message)
 
     with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
         server.login(sender_email, password)
-        server.sendmail(sender_email, receiver, msg.as_string())
+        server.sendmail(sender_email, receivers, msg.as_string())
+        print("mail sent, exiting...")
         server.quit()
 
 
@@ -140,7 +141,7 @@ def open_login_page():
 
 def add_to_basket(clickable):
     print("Opening found, trying to add to basket")
-    clickable.click()
+    driver.execute_script("arguments[0].click()", clickable)
     WebDriverWait(driver, 10).until(expected_conditions.alert_is_present())
     driver.switch_to.alert.accept()
     WebDriverWait(driver, 10).until(
@@ -148,7 +149,7 @@ def add_to_basket(clickable):
     driver.find_element_by_id("pageContent_cboxKiralikSatisSozlesmesi").click()
     WebDriverWait(driver, 10).until(expected_conditions.presence_of_element_located((By.ID, 'pageContent_lbtnSepeteEkle')))
     driver.find_element_by_id("pageContent_lbtnSepeteEkle").click()
-    WebDriverWait(driver, 10).until(expected_conditions.presence_of_element_located((By.ID, 'pageContent_btnOdemeYap')))
+    WebDriverWait(driver, 30).until(expected_conditions.presence_of_element_located((By.ID, 'pageContent_btnOdemeYap')))
 
 
 def retry():
@@ -169,7 +170,7 @@ def start_job():
             if action == "ADD_TO_BASKET":
                 add_to_basket(clickable)
             send_mail(action)
-            sys.exit()
+            sys.exit(0)
         else:
             retry()
     except TimeoutException:

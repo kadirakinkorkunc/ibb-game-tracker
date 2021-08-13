@@ -9,3 +9,4 @@ It is a reminder service for the service of Istanbul Metropolitan Municipality w
 <br> FACILITY_ID =>  Select option name field's value for particular facility.
 <br> PITCH_ID => Select option name field's value for particular pitch.
 <br> REQUESTED_TIME_RANGE => Should be a valid option for selected pitch.
+<br> RECEIVER_EMAILS => use a comma and space after comma for each email, if there is 1 email don't use email or space. 
