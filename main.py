@@ -53,13 +53,13 @@ def send_mail(action):
 def find_next_x_day(day_index, day_elements, requested_time_range):
     try:
         requested_day = day_elements[day_index]
-        time_range = requested_day.find_element_by_xpath("//span[.='{}']".format(requested_time_range))
+        time_range = requested_day.find_element_by_xpath("./div/div/div/span[contains(text(), '{}')]".format(requested_time_range))
         print("There is a time range exist in this week.")
     except NoSuchElementException:
         try:
             print("Couldn't find at the first element, trying to find in next week if it exists.")
             time_range = day_elements[day_index + 8].find_element_by_xpath(
-                "//span[.='{}']".format(requested_time_range))
+                "./div/div/div/span[contains(text(), '{}')]".format(requested_time_range))
             print("There is a time range exists in next week.")
         except NoSuchElementException:
             print("Couldn't find in next week either...")
@@ -91,7 +91,7 @@ def get_required_element_if_available():
 
     WebDriverWait(driver, 10).until(expected_conditions.presence_of_element_located((By.ID, 'pageContent_Div1')))
     content = driver.find_element_by_id("pageContent_Div1")
-    days = content.find_elements_by_tag_name("div")
+    days = content.find_elements_by_class_name("panel-info")
 
     requested_day = os.getenv("REQUESTED_DAY")
     requested_time = os.getenv("REQUESTED_TIME_RANGE")
@@ -99,9 +99,10 @@ def get_required_element_if_available():
     print("Day: ", requested_day, "- Time: ", requested_time)
     if time_range is not None:
         try:
-            clickable = time_range.find_element_by_xpath("./following-sibling::a")
+            clickable = time_range.find_element_by_xpath("./following-sibling::a[contains(., 'Rezervasyon')]")
             return clickable
         except NoSuchElementException:
+            print("Couldn't find a clickable...")
             return None
     return None
 
